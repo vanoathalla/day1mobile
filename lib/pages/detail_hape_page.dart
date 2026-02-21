@@ -1,272 +1,231 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'success_page.dart'; // Import halaman suksesnya
+import 'package:geolocator/geolocator.dart';
+import 'success_page.dart';
 
-class DetailHapePage extends StatelessWidget {
+class DetailHapePage extends StatefulWidget {
   final Map<String, dynamic> product;
-
   const DetailHapePage({super.key, required this.product});
+
+  @override
+  State<DetailHapePage> createState() => _DetailHapePageState();
+}
+
+class _DetailHapePageState extends State<DetailHapePage> {
+  String _currentAddress =
+      "Informatics UPN \"Veteran\" Yogyakarta, Sleman, DIY";
+
+  Future<void> _determinePosition() async {
+    LocationPermission permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+    }
+    Position position = await Geolocator.getCurrentPosition();
+    setState(() {
+      _currentAddress =
+          "📍 Koordinat GPS: ${position.latitude}, ${position.longitude}";
+    });
+  }
+
+  Future<void> _prosesBayar(BuildContext context) async {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(
+          child: CircularProgressIndicator(color: Color(0xFFFF5400))),
+    );
+    try {
+      await Supabase.instance.client.from('transactions').insert({
+        'product_name': widget.product['name'],
+        'price': widget.product['price'],
+        'buyer_name': 'Simonk Pulunkkk',
+        'status': 'LUNAS',
+      });
+      if (context.mounted) {
+        Navigator.pop(context);
+        Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(builder: (context) => const SuccessPage()),
+            (route) => false);
+      }
+    } catch (e) {
+      if (context.mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Gagal bre: $e')));
+      }
+    }
+  }
+
+  void _showCheckoutSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF141414),
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (context) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.9,
+          expand: false,
+          builder: (context, scrollController) {
+            return SingleChildScrollView(
+              controller: scrollController,
+              padding: const EdgeInsets.all(24.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Checkout',
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold)),
+                  const Divider(height: 32, color: Colors.white12),
+                  const Text('Alamat Pengiriman',
+                      style: TextStyle(
+                          color: Colors.white, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 12),
+                  StatefulBuilder(builder: (context, setSheetState) {
+                    return Row(
+                      children: [
+                        const Icon(Icons.location_on,
+                            color: Color(0xFFFF5400), size: 20),
+                        const SizedBox(width: 8),
+                        Expanded(
+                            child: Text(_currentAddress,
+                                style: const TextStyle(
+                                    color: Colors.white70, fontSize: 13))),
+                        TextButton(
+                          onPressed: () async {
+                            await _determinePosition();
+                            setSheetState(() {});
+                          },
+                          child: const Text('Ganti Lokasi',
+                              style: TextStyle(color: Color(0xFFFF5400))),
+                        ),
+                      ],
+                    );
+                  }),
+                  const Divider(height: 32, color: Colors.white12),
+                  Row(
+                    children: [
+                      ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: Image.network(
+                              widget.product['image_url'] ?? '',
+                              width: 70,
+                              height: 70,
+                              fit: BoxFit.cover)),
+                      const SizedBox(width: 16),
+                      Expanded(
+                          child: Text(widget.product['name'] ?? '',
+                              style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold))),
+                    ],
+                  ),
+                  const Divider(height: 32, color: Colors.white12),
+                  const Text('Ringkasan Pembayaran',
+                      style: TextStyle(
+                          color: Colors.white, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 12),
+                  _buildPriceRow(
+                      'Total Harga', 'Rp ${widget.product['price']}'),
+                  _buildPriceRow('Total Ongkir', 'Rp 15.000'),
+                  const Divider(height: 24, color: Colors.white12),
+                  _buildPriceRow(
+                      'Total Tagihan', 'Rp ${widget.product['price']}',
+                      isTotal: true),
+                  const SizedBox(height: 32),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFFF5400),
+                        minimumSize: const Size(double.infinity, 55),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(15))),
+                    onPressed: () => _prosesBayar(context),
+                    child: const Text('Bayar Sekarang',
+                        style: TextStyle(fontWeight: FontWeight.bold)),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildPriceRow(String label, String price, {bool isTotal = false}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label,
+              style: TextStyle(
+                  color: isTotal ? Colors.white : Colors.white54,
+                  fontWeight: isTotal ? FontWeight.bold : FontWeight.normal)),
+          Text(price,
+              style: TextStyle(
+                  color: isTotal ? const Color(0xFFFF5400) : Colors.white,
+                  fontWeight: isTotal ? FontWeight.bold : FontWeight.normal)),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(
-        0xFF0A0A0A,
-      ), // Background utama gelap ala Jaksel
+      backgroundColor: const Color(0xFF0A0A0A),
       body: CustomScrollView(
         slivers: [
           SliverAppBar(
             expandedHeight: 350.0,
             pinned: true,
             backgroundColor: const Color(0xFF0A0A0A),
-            foregroundColor: Colors.white, // Tombol back jadi putih
-            elevation: 0,
             flexibleSpace: FlexibleSpaceBar(
-              background: Hero(
-                tag: 'image_${product['id']}',
-                child: Image.network(
-                  product['image_url'] ?? 'https://via.placeholder.com/150',
-                  fit: BoxFit.cover,
-                ),
-              ),
-            ),
+                background: Image.network(widget.product['image_url'] ?? '',
+                    fit: BoxFit.cover)),
           ),
           SliverToBoxAdapter(
-            child: Container(
-              decoration: const BoxDecoration(
-                color: Color(0xFF0A0A0A), // Nyatu sama background atasnya
-                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-              ),
-              padding: const EdgeInsets.all(20.0),
+            child: Padding(
+              padding: const EdgeInsets.all(24.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Badge Kondisi
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF141414), // Abu-abu card
-                      border: Border.all(
-                        color: Colors.white12,
-                      ), // Border tipis kalcer
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      'Kondisi: ${product['condition'] ?? 'Unknown'}',
+                  Text(widget.product['name'] ?? '',
                       style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white70,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  // Judul Barang
-                  Text(
-                    product['name'] ?? 'No Name',
-                    style: const TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.w900,
-                      height: 1.2,
-                      color: Colors.white,
-                    ),
-                  ),
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white)),
                   const SizedBox(height: 8),
-                  // Harga
-                  Text(
-                    'Rp ${product['price'] ?? 0}',
-                    style: const TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.w900,
-                      color: Color(0xFFFF5400), // Electric Orange
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-
-                  // Dummy Profil Penjual (Vibes Dark Mode)
-                  Row(
-                    children: [
-                      CircleAvatar(
-                        radius: 24,
-                        backgroundColor: const Color(
-                          0xFFFF5400,
-                        ).withOpacity(0.15),
-                        child: const Icon(
-                          Icons.person,
+                  Text('Rp ${widget.product['price']}',
+                      style: const TextStyle(
+                          fontSize: 28,
                           color: Color(0xFFFF5400),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      const Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Simonk Store',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
-                                color: Colors.white,
-                              ),
-                            ),
-                            Text(
-                              'Aktif 5 menit yang lalu • Yogyakarta',
-                              style: TextStyle(
-                                color: Colors.white54,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      OutlinedButton(
-                        onPressed: () {},
-                        style: OutlinedButton.styleFrom(
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          side: const BorderSide(color: Color(0xFFFF5400)),
-                        ),
-                        child: const Text(
-                          'Follow',
-                          style: TextStyle(color: Color(0xFFFF5400)),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const Divider(
-                    height: 40,
-                    thickness: 1,
-                    color: Colors.white12,
-                  ), // Garis pembatas tipis
-
-                  const Text(
-                    'Deskripsi Produk',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  // Isi Deskripsi
-                  Text(
-                    product['description'] ??
-                        'Seller-nya mager nulis deskripsi bre.',
-                    style: const TextStyle(
-                      fontSize: 15,
-                      color:
-                          Colors.white70, // Putih agak redup biar enak dibaca
-                      height: 1.6,
-                    ),
-                  ),
-                  const SizedBox(height: 100), // Spasi aman buat bottom bar
+                          fontWeight: FontWeight.w900)),
+                  const SizedBox(height: 200),
                 ],
               ),
             ),
           ),
         ],
       ),
-      // Sticky Bottom Bar ala E-Commerce Dark Mode
-      bottomNavigationBar: SafeArea(
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          decoration: const BoxDecoration(
-            color: Color(0xFF141414), // Background bar agak nongol
-            border: Border(top: BorderSide(color: Colors.white12)),
-          ),
-          child: Row(
-            children: [
-              Container(
-                decoration: BoxDecoration(
-                  border: Border.all(color: Colors.white12),
-                  borderRadius: BorderRadius.circular(12),
-                  color: const Color(0xFF0A0A0A),
-                ),
-                child: IconButton(
-                  icon: const Icon(
-                    Icons.chat_bubble_outline,
-                    color: Colors.white,
-                  ),
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Nanya "Barang ready bang?"'),
-                      ),
-                    );
-                  },
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFFF5400),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  onPressed: () async {
-                    // 1. Keluarin efek loading nutupin layar
-                    showDialog(
-                      context: context,
-                      barrierDismissible:
-                          false, // Ga bisa di-cancel pake klik luar
-                      builder: (context) => const Center(
-                        child: CircularProgressIndicator(
-                          color: Color(0xFFFF5400),
-                        ),
-                      ),
-                    );
-
-                    try {
-                      // 2. Tembak data transaksinya ke Supabase
-                      await Supabase.instance.client
-                          .from('transactions')
-                          .insert({
-                            'product_name': product['name'],
-                            'price': product['price'],
-                            'buyer_name': 'Simonk',
-                            'status': 'LUNAS',
-                          });
-
-                      // 3. Pastiin layar lu masih aktif
-                      if (context.mounted) {
-                        Navigator.pop(context); // Matiin loading-nya
-
-                        // Pindah ke layar sukses (dan ga bisa di-back ke halaman bayar lagi)
-                        Navigator.pushAndRemoveUntil(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const SuccessPage(),
-                          ),
-                          (route) => false,
-                        );
-                      }
-                    } catch (e) {
-                      // Kalo misal error atau ga ada internet
-                      if (context.mounted) {
-                        Navigator.pop(context); // Matiin loading
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Error bre: $e')),
-                        );
-                      }
-                    }
-                  },
-                  child: const Text(
-                    'Jokul Sekarang',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ),
-            ],
-          ),
+      bottomNavigationBar: Container(
+        padding: const EdgeInsets.all(16),
+        color: const Color(0xFF141414),
+        child: ElevatedButton(
+          style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFFF5400),
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12))),
+          onPressed: () => _showCheckoutSheet(context),
+          child: const Text('Jokul Sekarang',
+              style:
+                  TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         ),
       ),
     );
